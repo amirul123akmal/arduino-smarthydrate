@@ -10,7 +10,15 @@ bool captureAndSendToApi(const char* targetUrl, String &outResponse, int &outHtt
     return false;
   }
 
+  // Flush the buffer to ensure a fresh frame
   camera_fb_t * fb = esp_camera_fb_get();
+  if (fb) {
+    esp_camera_fb_return(fb);
+    fb = NULL;
+  }
+
+  // Real capture
+  fb = esp_camera_fb_get();
   if (!fb) {
     outResponse = "Camera capture failed";
     return false;
