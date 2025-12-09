@@ -1,10 +1,1 @@
-ESP32-Cam/build/build_opt.h
-ESP32-Cam/build/build.options.json
-ESP32-Cam/build/ESP32-Cam.ino.bootloader.bin
-ESP32-Cam/build/file_opts
-ESP32-Cam/build/includes.cache
-ESP32-Cam/build/libraries.cache
-ESP32-Cam/build/partitions.csv
-ESP32-Cam/build/sdkconfig
-ESP32-Cam/build/sketch/ESP32-Cam.ino.cpp
-ESP32-Cam/build/sketch/ESP32-Cam.ino.cpp.d
+ESP32-Cam/build/*
