@@ -40,6 +40,10 @@ IPAddress subnet(255, 255, 255, 0);
 IPAddress primaryDNS(8, 8, 8, 8); // Optional
 // -----------------------------------------------------------
 
+// --------------------- Snap Endpoint Config ----------------
+const char* SNAP_TARGET_URL = "http://10.79.237.162:5000/upload-base64";
+// -----------------------------------------------------------
+
 // AI-Thinker Camera Pin Map
 #define PWDN_GPIO_NUM     32
 #define RESET_GPIO_NUM    -1
@@ -67,6 +71,7 @@ bool initCamera();
 void startWebServer();
 void handleRoot();
 void handleCaptureEndpoint();
+void handleSnapEndpoint();
 void handleStream();
 bool captureAndSendToApi(const char* targetUrl, String &outResponse, int &outHttpCode);
 void ensureWiFiConnected();
@@ -163,6 +168,7 @@ bool initCamera() {
 void startWebServer() {
   server.on("/", HTTP_GET, handleRoot);
   server.on("/capture", HTTP_GET, handleCaptureEndpoint);
+  server.on("/snap", HTTP_POST, handleSnapEndpoint); // Post triggers capture to fixed URL
   server.on("/stream", HTTP_GET, handleStream);
 
   server.begin();
@@ -235,6 +241,40 @@ void handleCaptureEndpoint() {
   String apiResp;
   int httpCode = 0;
   bool ok = captureAndSendToApi(targetUrl.c_str(), apiResp, httpCode);
+
+  String reply;
+  if (ok) {
+    reply = "{\"success\":true, \"http_code\":";
+    reply += String(httpCode);
+    reply += ", \"api_response\":";
+    String esc = apiResp;
+    esc.replace("\\", "\\\\");
+    esc.replace("\"", "\\\"");
+    esc.replace("\n", "\\n");
+    esc.replace("\r", "\\r");
+    reply += "\"" + esc + "\"";
+    reply += "}";
+    server.send(200, "application/json", reply);
+  } else {
+    reply = "{\"success\":false, \"http_code\":";
+    reply += String(httpCode);
+    reply += ", \"api_response\":";
+    String esc = apiResp;
+    esc.replace("\\", "\\\\");
+    esc.replace("\"", "\\\"");
+    esc.replace("\n", "\\n");
+    esc.replace("\r", "\\r");
+    reply += "\"" + esc + "\"";
+    reply += "}";
+    server.send(500, "application/json", reply);
+  }
+}
+
+void handleSnapEndpoint() {
+  String apiResp;
+  int httpCode = 0;
+  // Always send to the fixed SNAP_TARGET_URL
+  bool ok = captureAndSendToApi(SNAP_TARGET_URL, apiResp, httpCode);
 
   String reply;
   if (ok) {
