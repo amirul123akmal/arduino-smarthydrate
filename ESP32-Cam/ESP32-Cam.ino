@@ -18,11 +18,11 @@
 #include <WiFiClientSecure.h>
 
 // ----------------------- USER CONFIG -----------------------
-const char* WIFI_SSID = "YOUR_SSID";
-const char* WIFI_PASS = "YOUR_PASSWORD";
+const char* WIFI_SSID = "M";
+const char* WIFI_PASS = "1234567899";
 
 // Destination API URL (http:// or https://)
-const char* API_URL = "https://example.com/api/upload"; // <-- change to your API
+const char* API_URL = "http:"; // <-- change to your API
 
 // If true and API_URL is https://..., will call client.setInsecure() (no cert validation).
 // For production, replace with setCACert() and your CA certificate.
@@ -30,6 +30,14 @@ const bool HTTPS_INSECURE = true;
 
 // Optional: automatic periodic send interval (ms). Set 0 to disable.
 const unsigned long AUTO_SEND_INTERVAL_MS = 0; // e.g., 60000 for every 60s
+// -----------------------------------------------------------
+
+// --------------------- Static IP Config --------------------
+const bool USE_STATIC_IP = true;
+IPAddress local_IP(10, 79, 237, 66);
+IPAddress gateway(10, 79, 237, 12);
+IPAddress subnet(255, 255, 255, 0);
+IPAddress primaryDNS(8, 8, 8, 8); // Optional
 // -----------------------------------------------------------
 
 // AI-Thinker Camera Pin Map
@@ -60,7 +68,7 @@ void startWebServer();
 void handleRoot();
 void handleCaptureEndpoint();
 void handleStream();
-bool captureAndSendToApi(String &outResponse, int &outHttpCode);
+bool captureAndSendToApi(const char* targetUrl, String &outResponse, int &outHttpCode);
 void ensureWiFiConnected();
 void printCameraInfo();
 
@@ -102,7 +110,8 @@ void loop() {
       Serial.println("Auto-capture triggered.");
       String resp;
       int httpCode;
-      if (captureAndSendToApi(resp, httpCode)) {
+      // Use default API_URL for auto-send
+      if (captureAndSendToApi(API_URL, resp, httpCode)) {
         Serial.printf("Auto-upload succeeded, HTTP %d\n", httpCode);
       } else {
         Serial.printf("Auto-upload failed, HTTP %d, response: %s\n", httpCode, resp.c_str());
@@ -164,19 +173,68 @@ void startWebServer() {
 }
 
 void handleRoot() {
-  String html = "<html><head><title>ESP32-CAM</title></head><body>";
-  html += "<h3>ESP32-CAM - Base64 upload ({\"image\":\"...\"})</h3>";
-  html += "<p>Device IP: " + WiFi.localIP().toString() + "</p>";
-  html += "<p><a href=\"/stream\">Open stream</a></p>";
-  html += "<p><a href=\"/capture\">Capture and send to API</a></p>";
-  html += "</body></html>";
+  String html = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+  <title>ESP32-CAM Capture</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: sans-serif; text-align: center; margin: 0; padding: 20px; }
+    input, button { padding: 10px; font-size: 16px; margin: 10px; width: 80%; max-width: 400px; }
+    #output { background: #f4f4f4; padding: 10px; text-align: left; white-space: pre-wrap; margin: 20px auto; width: 90%; border: 1px solid #ddd; min-height: 100px; }
+    h3 { margin-bottom: 5px; }
+  </style>
+</head>
+<body>
+  <h3>ESP32-CAM Capture</h3>
+  <p>IP: )rawliteral";
+  html += WiFi.localIP().toString();
+  html += R"rawliteral(</p>
+  
+  <input type="text" id="url" placeholder="Enter API URL (e.g. http://192.168.1.5:5000/upload)" value=")rawliteral";
+  html += API_URL;
+  html += R"rawliteral(">
+  <br>
+  <button onclick="capture()">Capture & Send</button>
+  
+  <div id="output">Output will appear here...</div>
+  <p><a href="/stream">View Stream</a></p>
+
+  <script>
+    function capture() {
+      var urlInput = document.getElementById("url").value;
+      var out = document.getElementById("output");
+      out.innerText = "Capturing and sending...";
+      
+      var endpoint = "/capture?url=" + encodeURIComponent(urlInput);
+      
+      fetch(endpoint)
+        .then(response => response.json())
+        .then(data => {
+          out.innerText = JSON.stringify(data, null, 2);
+        })
+        .catch(err => {
+          out.innerText = "Error: " + err;
+        });
+    }
+  </script>
+</body>
+</html>
+)rawliteral";
+
   server.send(200, "text/html", html);
 }
 
 void handleCaptureEndpoint() {
+  String targetUrl = String(API_URL);
+  if (server.hasArg("url") && server.arg("url") != "") {
+    targetUrl = server.arg("url");
+  }
+
   String apiResp;
   int httpCode = 0;
-  bool ok = captureAndSendToApi(apiResp, httpCode);
+  bool ok = captureAndSendToApi(targetUrl.c_str(), apiResp, httpCode);
 
   String reply;
   if (ok) {
@@ -186,6 +244,8 @@ void handleCaptureEndpoint() {
     String esc = apiResp;
     esc.replace("\\", "\\\\");
     esc.replace("\"", "\\\"");
+    esc.replace("\n", "\\n");
+    esc.replace("\r", "\\r");
     reply += "\"" + esc + "\"";
     reply += "}";
     server.send(200, "application/json", reply);
@@ -196,6 +256,8 @@ void handleCaptureEndpoint() {
     String esc = apiResp;
     esc.replace("\\", "\\\\");
     esc.replace("\"", "\\\"");
+    esc.replace("\n", "\\n");
+    esc.replace("\r", "\\r");
     reply += "\"" + esc + "\"";
     reply += "}";
     server.send(500, "application/json", reply);
@@ -245,9 +307,9 @@ void handleStream() {
 }
 
 // --------------------- Capture & send ----------------------
-// Captures a frame, Base64-encodes it, sends JSON {"image":"<base64>"} to API_URL.
+// Captures a frame, Base64-encodes it, sends JSON {"image":"<base64>"} to targetUrl.
 // Returns true on success (HTTP 2xx). outResponse contains API response body or error.
-bool captureAndSendToApi(String &outResponse, int &outHttpCode) {
+bool captureAndSendToApi(const char* targetUrl, String &outResponse, int &outHttpCode) {
   outResponse = "";
   outHttpCode = 0;
 
@@ -296,7 +358,8 @@ bool captureAndSendToApi(String &outResponse, int &outHttpCode) {
   esp_camera_fb_return(fb);
 
   // Prepare HTTP client (HTTP or HTTPS)
-  bool useHttps = String(API_URL).startsWith("https://");
+  // Prepare HTTP client (HTTP or HTTPS)
+  bool useHttps = String(targetUrl).startsWith("https://");
   WiFiClient *tcpClient = NULL;
   WiFiClientSecure *secureClient = NULL;
 
@@ -322,7 +385,7 @@ bool captureAndSendToApi(String &outResponse, int &outHttpCode) {
   http.setConnectTimeout(10000); // 10s
   http.setTimeout(30000); // 30s
 
-  bool beginOk = http.begin(*tcpClient, API_URL);
+  bool beginOk = http.begin(*tcpClient, targetUrl);
   if (!beginOk) {
     free(b64_buf);
     delete tcpClient;
@@ -332,7 +395,7 @@ bool captureAndSendToApi(String &outResponse, int &outHttpCode) {
 
   http.addHeader("Content-Type", "application/json");
 
-  Serial.printf("Posting JSON payload (%u bytes) to %s\n", (unsigned int)json.length(), API_URL);
+  Serial.printf("Posting JSON payload (%u bytes) to %s\n", (unsigned int)json.length(), targetUrl);
   int httpCode = http.POST((uint8_t*)json.c_str(), json.length());
   outHttpCode = httpCode;
 
@@ -357,6 +420,15 @@ void ensureWiFiConnected() {
   if (WiFi.status() == WL_CONNECTED) return;
 
   Serial.printf("Connecting to WiFi SSID: %s\n", WIFI_SSID);
+
+  if (USE_STATIC_IP) {
+    if (!WiFi.config(local_IP, gateway, subnet, primaryDNS)) {
+      Serial.println("STA Failed to configure");
+    } else {
+      Serial.println("Static IP configured.");
+    }
+  }
+
   WiFi.begin(WIFI_SSID, WIFI_PASS);
 
   unsigned long start = millis();
