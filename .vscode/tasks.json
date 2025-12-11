@@ -1,0 +1,33 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "List All Port",
+            "type": "shell",
+            "command": "arduino-cli board list",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build ESP32-Cam",
+            "type": "shell",
+            "command": "arduino-cli compile --fqbn esp32:esp32:esp32cam -j 15 --build-path .\\ESP32-Cam\\build \"C:\\Users\\User\\dev\\Arduino\\fyp\\ESP32-Cam\" --verbose"
+        },
+        {
+            "label": "Build ESP32",
+            "type": "shell",
+            "command": "arduino-cli compile --fqbn esp32:esp32:esp32 -j 15 --build-path .\\ESP32\\build \"C:\\Users\\User\\dev\\Arduino\\fyp\\ESP32\" --verbose"
+        },
+        {
+            "label": "Upload ESP32-Cam",
+            "type": "shell",
+            "command": "arduino-cli upload -p COM3 --fqbn esp32:esp32:esp32cam --input-dir .\\ESP32-Cam\\build --verbose"
+        },
+        {
+            "label": "Upload ESP32",
+            "type": "shell",
+            "command": "arduino-cli upload -p COM6 --fqbn esp32:esp32:esp32 --input-dir .\\ESP32\\build --verbose"
+        }
+    ]
+}
