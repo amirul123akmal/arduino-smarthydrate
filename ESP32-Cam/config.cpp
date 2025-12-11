@@ -17,4 +17,4 @@ const unsigned long AUTO_SEND_INTERVAL_MS = 0;
 const bool USE_STATIC_IP = true;
 
 // --------------------- Snap Endpoint Config ----------------
-const char* SNAP_TARGET_URL = "http://10.79.237.162:5000/upload-base64";
+const char* SNAP_TARGET_URL = "http://192.168.137.1:5000/upload-base64";
