@@ -12,22 +12,41 @@
         {
             "label": "Build ESP32-Cam",
             "type": "shell",
-            "command": "arduino-cli compile --fqbn esp32:esp32:esp32cam -j 15 --build-path .\\ESP32-Cam\\build \"C:\\Users\\User\\dev\\Arduino\\fyp\\ESP32-Cam\" --verbose"
+            "command": "arduino-cli compile --fqbn esp32:esp32:esp32cam -j 15 --build-path .\\ESP32-Cam\\build \"C:\\Users\\User\\dev\\Arduino\\fyp\\ESP32-Cam\" --verbose",
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
         },
         {
             "label": "Build ESP32",
             "type": "shell",
-            "command": "arduino-cli compile --fqbn esp32:esp32:esp32 -j 15 --build-path .\\ESP32\\build \"C:\\Users\\User\\dev\\Arduino\\fyp\\ESP32\" --verbose"
+            "command": "arduino-cli compile --fqbn esp32:esp32:esp32 -j 15 --build-path .\\ESP32\\build \"C:\\Users\\User\\dev\\Arduino\\fyp\\ESP32\" --verbose",
+            "problemMatcher": [],
+            "group": {
+                "kind": "build"
+            }
         },
         {
             "label": "Upload ESP32-Cam",
             "type": "shell",
-            "command": "arduino-cli upload -p COM3 --fqbn esp32:esp32:esp32cam --input-dir .\\ESP32-Cam\\build --verbose"
+            "command": "arduino-cli upload -p ${input:port} --fqbn esp32:esp32:esp32cam --input-dir .\\ESP32-Cam\\build --verbose",
+            "problemMatcher": []
         },
         {
             "label": "Upload ESP32",
             "type": "shell",
-            "command": "arduino-cli upload -p COM6 --fqbn esp32:esp32:esp32 --input-dir .\\ESP32\\build --verbose"
+            "command": "arduino-cli upload -p ${input:port} --fqbn esp32:esp32:esp32 --input-dir .\\ESP32\\build --verbose"
+        }
+    ],
+    "inputs": [
+        {
+            "id": "port",          // Reference ID
+            "type": "promptString",    // Prompt for a string
+            "description": "Enter COM port", // Message shown to user
+            "default": "COM6"   // Default value if user presses Enter
         }
     ]
+
 }
