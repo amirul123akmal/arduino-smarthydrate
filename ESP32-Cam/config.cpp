@@ -1,7 +1,7 @@
 #include "config.h"
 
 // ----------------------- USER CONFIG -----------------------
-const char* WIFI_SSID = "M";
+const char* WIFI_SSID = "N";
 const char* WIFI_PASS = "1234567899";
 
 // Destination API URL (default for input box)

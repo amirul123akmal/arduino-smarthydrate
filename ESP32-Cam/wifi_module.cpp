@@ -16,8 +16,8 @@ void connectWiFi() {
   // I will assume specific values here based on previous context.
   
   // From previous task:
-  IPAddress local_IP(10, 79, 237, 66);
-  IPAddress gateway(10, 79, 237, 12);
+  IPAddress local_IP(192, 168, 137, 50);
+  IPAddress gateway(192, 168, 137, 1);
   IPAddress subnet(255, 255, 255, 0);
   IPAddress primaryDNS(8, 8, 8, 8); 
 
