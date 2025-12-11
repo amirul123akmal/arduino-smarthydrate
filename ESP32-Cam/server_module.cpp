@@ -119,7 +119,8 @@ void handleCaptureEndpoint() {
 void handleSnapEndpoint() {
   String apiResp;
   int httpCode = 0;
-  bool ok = captureAndSendToApi(SNAP_TARGET_URL, apiResp, httpCode);
+  String base64Image;
+  bool ok = captureAndSendToApi(SNAP_TARGET_URL, apiResp, httpCode, &base64Image);
 
   String reply;
   if (ok) {
@@ -132,6 +133,7 @@ void handleSnapEndpoint() {
     esc.replace("\n", "\\n");
     esc.replace("\r", "\\r");
     reply += "\"" + esc + "\"";
+    reply += ", \"image\": \"" + base64Image + "\"";
     reply += "}";
     server.send(200, "application/json", reply);
   } else {
@@ -144,6 +146,7 @@ void handleSnapEndpoint() {
     esc.replace("\n", "\\n");
     esc.replace("\r", "\\r");
     reply += "\"" + esc + "\"";
+    reply += ", \"image\": \"" + base64Image + "\"";
     reply += "}";
     server.send(500, "application/json", reply);
   }
@@ -181,7 +184,7 @@ void handleStream() {
     esp_camera_fb_return(fb);
 
     if (!client.connected()) break;
-    delay(30);
+    delay(100);
   }
   client.stop();
 }

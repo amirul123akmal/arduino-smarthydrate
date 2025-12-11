@@ -8,6 +8,6 @@
 #include "esp_camera.h"
 #include "mbedtls/base64.h"
 
-bool captureAndSendToApi(const char* targetUrl, String &outResponse, int &outHttpCode);
+bool captureAndSendToApi(const char* targetUrl, String &outResponse, int &outHttpCode, String *outBase64Image = NULL);
 
 #endif

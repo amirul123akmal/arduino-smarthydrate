@@ -1,7 +1,7 @@
 #include "api_module.h"
 #include "config.h"
 
-bool captureAndSendToApi(const char* targetUrl, String &outResponse, int &outHttpCode) {
+bool captureAndSendToApi(const char* targetUrl, String &outResponse, int &outHttpCode, String *outBase64Image) {
   outResponse = "";
   outHttpCode = 0;
 
@@ -43,7 +43,11 @@ bool captureAndSendToApi(const char* targetUrl, String &outResponse, int &outHtt
     outResponse = "Base64 encoding failed";
     return false;
   }
-  b64_buf[actual_b64_len] = 0; // null-terminate
+    b64_buf[actual_b64_len] = 0; // null-terminate
+
+  if (outBase64Image) {
+    *outBase64Image = (char*)b64_buf;
+  }
 
   String json;
   json.reserve(actual_b64_len + 32);
