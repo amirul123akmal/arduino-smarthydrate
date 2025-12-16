@@ -1,3 +1,9 @@
 **/build/*
 *.jpg
 .vscode/tasks.json
+Backend/__pycache__/sqliteDB.cpython-311.pyc
+Design.drawio
+fyp.code-workspace
+.$Design.drawio.bkp
+Backend/instance/app.db-shm
+Backend/instance/app.db-wal
