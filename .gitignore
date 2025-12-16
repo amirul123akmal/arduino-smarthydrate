@@ -7,3 +7,4 @@ fyp.code-workspace
 .$Design.drawio.bkp
 Backend/instance/app.db-shm
 Backend/instance/app.db-wal
+Backend/instance/app.db
