@@ -14,6 +14,7 @@ import base64
 import imghdr
 import logging
 from sqliteDB import SqliteDB
+from user import delete_user
 from flask import g, current_app, Flask, request, jsonify, render_template
 from werkzeug.utils import secure_filename
 from binascii import Error as BinAsciiError
@@ -178,6 +179,30 @@ def add_user():
         return jsonify({"error": "Failed to add user feature", "details": str(e)}), 500
 
 
+@app.route('/delete-users', methods=['POST'])
+def delete_user_route():
+    """
+    Deletes a user by ID.
+    Expects JSON payload: {"user_id": 123}
+    """
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+        
+    payload = request.get_json()
+    user_id = payload.get('user_id')
+    
+    if not user_id:
+        return jsonify({"error": "Missing 'user_id'"}), 400
+        
+    try:
+        delete_user(db, user_id)
+        app.logger.info(f"User {user_id} deleted successfully")
+        return jsonify({"message": "User deleted successfully"}), 200
+    except Exception as e:
+        app.logger.error(f"Error deleting user: {e}")
+        return jsonify({"error": "Failed to delete user", "details": str(e)}), 500
+
+
 @app.route('/')
 def index():  
     # Mock data for the dashboard
@@ -190,42 +215,8 @@ def index():
         # 'total_goal_liters': 6.0,
         # 'last_sync': datetime.now().strftime("%H:%M:%S")
     }
-    db.fetchall("select * from users")
-    users = [
-        # {
-        #     'id': 1,
-        #     'name': 'Alice',
-        #     'intake_liters': 1.5,
-        #     'daily_limit_liters': 2.0,
-        #     'last_event_time': '10:30 AM',
-        #     'events': [
-        #         {'time': '10:30 AM', 'volume_ml': 250},
-        #         {'time': '09:15 AM', 'volume_ml': 200},
-        #         {'time': '08:00 AM', 'volume_ml': 300}
-        #     ]
-        # },
-        # {
-        #     'id': 2,
-        #     'name': 'Bob',
-        #     'intake_liters': 2.1,
-        #     'daily_limit_liters': 2.5,
-        #     'last_event_time': '11:45 AM',
-        #     'events': [
-        #         {'time': '11:45 AM', 'volume_ml': 500},
-        #         {'time': '09:00 AM', 'volume_ml': 500}
-        #     ]
-        # },
-        # {
-        #     'id': 3,
-        #     'name': 'Charlie',
-        #     'intake_liters': 0.5,
-        #     'daily_limit_liters': 2.0,
-        #     'last_event_time': '07:30 AM',
-        #     'events': [
-        #         {'time': '07:30 AM', 'volume_ml': 500}
-        #     ]
-        # }
-    ]
+    users = db.fetchall("select * from users")
+    app.logger.info("Users: %s", users)
 
     return render_template(
         'index.html',
