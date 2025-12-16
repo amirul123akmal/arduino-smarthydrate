@@ -2,10 +2,6 @@
 """
 Simple Flask server to receive a base64 image and save it to the current folder.
 
-POST /upload-base64
- - Content-Type: application/json
- - Body JSON: {"image": "<base64-or-data-url>", "filename": "optional-name.png"}
-
 The "image" value can be:
  - a data URL like "data:image/png;base64,iVBORw0KG..."
  - or a raw base64 string "iVBORw0KG..."
@@ -16,14 +12,27 @@ import re
 import uuid
 import base64
 import imghdr
-from flask import Flask, request, jsonify, render_template
+import logging
+from sqliteDB import SqliteDB
+from flask import g, current_app, Flask, request, jsonify, render_template
 from werkzeug.utils import secure_filename
 from binascii import Error as BinAsciiError
+
+# Configure logging to file
+logging.basicConfig(
+    filename='backend.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 app = Flask(__name__, template_folder="views")
 
 # Limit request size (e.g., 16 MB). Adjust as needed.
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+
+# Initialize the database
+db = SqliteDB("app.db")
+db.init_app(app)
 
 # regex to parse data URLs: data:<mime>;base64,<data>
 DATA_URL_RE = re.compile(r'^data:(image/[^;]+);base64,(.+)$', flags=re.I)
@@ -36,6 +45,14 @@ def detect_extension_from_bytes(data: bytes):
         return 'jpg'
     return kind  # may be 'png', 'gif', etc. or None
 
+"""
+
+POST /upload-base64
+ - Content-Type: application/json
+ - Body JSON: {"image": "<base64-or-data-url>", "filename": "optional-name.png"}
+
+
+"""
 
 @app.route('/upload-base64', methods=['POST'])
 def upload_base64():
@@ -119,55 +136,95 @@ def upload_base64():
     return jsonify({"saved_as": file_name, "path": save_path}), 201
 
 from datetime import datetime
-import sqlite3 
+
+@app.route('/add-user', methods=['POST'])
+def add_user():
+    """
+    Adds a new user with their daily hydration limit and an array of pains.
+    Expects JSON payload: {"name": "User Name", "daily_limit": 2.5, "pains": ["headache", "fatigue"]}
+    """
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+    app.logger.info("Request received: %s", request.get_json())
+    payload = request.get_json()
+    name = payload.get('name')
+    daily_limit = payload.get('daily_limit')
+    pains = payload.get('pains')
+
+    if not name or not isinstance(name, str) or not name.strip():
+        return jsonify({"error": "Invalid or missing 'name'"}), 400
+    if not isinstance(daily_limit, (int, float)) or daily_limit <= 0:
+        return jsonify({"error": "Invalid or missing 'daily_limit'. Must be a positive number."}), 400
+    if not isinstance(pains, list):
+        return jsonify({"error": "Invalid or missing 'pains'. Must be an array."}), 400
+
+    # Convert pains list to a JSON string for storage
+    import json
+    # pains_json_str = json.dumps(pains 
+    daily_limit_ml = daily_limit * 1000
+    try:
+        # Assuming a 'users' table with columns: id, name, daily_limit_liters, pains_json
+        # And that SqliteDB has an execute_query method for inserts
+        query = """
+            INSERT INTO users (name, image_path, daily_limit_ml, created_at)
+            VALUES (?, ?, ?, ?);
+        """
+        # The execute_query method should return the last inserted row ID
+        user_id = db.execute(query, (name.strip(), '', daily_limit_ml, datetime.now()))
+        app.logger.info("User added successfully: %s", user_id.fetchone())
+        return jsonify({"message": "User feature added successfully", "user_id": user_id.fetchone()}), 201
+    except Exception as e:
+        app.logger.error(f"Error adding user feature: {e}")
+        return jsonify({"error": "Failed to add user feature", "details": str(e)}), 500
+
 
 @app.route('/')
-def index():
+def index():  
     # Mock data for the dashboard
     system_status = {'online': True}
     
     overall = {
-        'percent': 65,
-        'avg_liters': 1.2,
-        'total_liters': 3.6,
-        'total_goal_liters': 6.0,
-        'last_sync': datetime.now().strftime("%H:%M:%S")
+        # 'percent': 65,
+        # 'avg_liters': 1.2,
+        # 'total_liters': 3.6,
+        # 'total_goal_liters': 6.0,
+        # 'last_sync': datetime.now().strftime("%H:%M:%S")
     }
-    
+    db.fetchall("select * from users")
     users = [
-        {
-            'id': 1,
-            'name': 'Alice',
-            'intake_liters': 1.5,
-            'daily_limit_liters': 2.0,
-            'last_event_time': '10:30 AM',
-            'events': [
-                {'time': '10:30 AM', 'volume_ml': 250},
-                {'time': '09:15 AM', 'volume_ml': 200},
-                {'time': '08:00 AM', 'volume_ml': 300}
-            ]
-        },
-        {
-            'id': 2,
-            'name': 'Bob',
-            'intake_liters': 2.1,
-            'daily_limit_liters': 2.5,
-            'last_event_time': '11:45 AM',
-            'events': [
-                {'time': '11:45 AM', 'volume_ml': 500},
-                {'time': '09:00 AM', 'volume_ml': 500}
-            ]
-        },
-        {
-            'id': 3,
-            'name': 'Charlie',
-            'intake_liters': 0.5,
-            'daily_limit_liters': 2.0,
-            'last_event_time': '07:30 AM',
-            'events': [
-                {'time': '07:30 AM', 'volume_ml': 500}
-            ]
-        }
+        # {
+        #     'id': 1,
+        #     'name': 'Alice',
+        #     'intake_liters': 1.5,
+        #     'daily_limit_liters': 2.0,
+        #     'last_event_time': '10:30 AM',
+        #     'events': [
+        #         {'time': '10:30 AM', 'volume_ml': 250},
+        #         {'time': '09:15 AM', 'volume_ml': 200},
+        #         {'time': '08:00 AM', 'volume_ml': 300}
+        #     ]
+        # },
+        # {
+        #     'id': 2,
+        #     'name': 'Bob',
+        #     'intake_liters': 2.1,
+        #     'daily_limit_liters': 2.5,
+        #     'last_event_time': '11:45 AM',
+        #     'events': [
+        #         {'time': '11:45 AM', 'volume_ml': 500},
+        #         {'time': '09:00 AM', 'volume_ml': 500}
+        #     ]
+        # },
+        # {
+        #     'id': 3,
+        #     'name': 'Charlie',
+        #     'intake_liters': 0.5,
+        #     'daily_limit_liters': 2.0,
+        #     'last_event_time': '07:30 AM',
+        #     'events': [
+        #         {'time': '07:30 AM', 'volume_ml': 500}
+        #     ]
+        # }
     ]
 
     return render_template(
