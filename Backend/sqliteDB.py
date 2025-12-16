@@ -7,6 +7,9 @@ from typing import Any, Iterable, Iterator, List, Optional
 
 from flask import g, current_app
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 class SqliteDB:
     """
@@ -70,15 +73,35 @@ class SqliteDB:
 
     # Basic executors
     def execute(self, sql: str, params: Optional[Iterable[Any]] = None) -> sqlite3.Cursor:
-        cur = self.get_conn().execute(sql, tuple(params) if params else ())
-        return cur
+        try:
+            logger.info(f"Executing SQL: {sql} | Params: {params}")
+            cur = self.get_conn().execute(sql, tuple(params) if params else ())
+            self.get_conn().commit()
+            logger.info("SQL executed successfully.")
+            return cur
+        except Exception as e:
+            logger.error(f"SQL execution failed: {e}")
+            raise
 
     def executemany(self, sql: str, seq_of_params: Iterable[Iterable[Any]]) -> sqlite3.Cursor:
-        cur = self.get_conn().executemany(sql, seq_of_params)
-        return cur
+        try:
+            logger.info(f"Executing Many SQL: {sql}")
+            cur = self.get_conn().executemany(sql, seq_of_params)
+            self.get_conn().commit()
+            logger.info("SQL executemany successful.")
+            return cur
+        except Exception as e:
+            logger.error(f"SQL executemany failed: {e}")
+            raise
 
     def executescript(self, sql_script: str) -> None:
-        self.get_conn().executescript(sql_script)
+        try:
+            logger.info("Executing SQL script.")
+            self.get_conn().executescript(sql_script)
+            logger.info("SQL script executed successfully.")
+        except Exception as e:
+            logger.error(f"SQL script execution failed: {e}")
+            raise
 
     # Fetch helpers that return dicts
     def fetchone(self, sql: str, params: Optional[Iterable[Any]] = None) -> Optional[dict]:
