@@ -8,3 +8,4 @@ fyp.code-workspace
 Backend/instance/app.db-shm
 Backend/instance/app.db-wal
 Backend/instance/app.db
+Backend/backend.log
