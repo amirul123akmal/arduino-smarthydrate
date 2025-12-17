@@ -58,35 +58,29 @@ bool captureAndSendToApi(const char* targetUrl, String &outResponse, int &outHtt
   esp_camera_fb_return(fb);
 
   bool useHttps = String(targetUrl).startsWith("https://");
-  WiFiClient *tcpClient = NULL;
-  WiFiClientSecure *secureClient = NULL;
+  
+  // Use static clients to avoid pbuf_free errors from frequent new/delete
+  static WiFiClient tcpClient;
+  static WiFiClientSecure secureClient;
+  
+  WiFiClient * clientPtr = NULL;
 
   if (useHttps) {
-    secureClient = new WiFiClientSecure();
-    if (!secureClient) {
-      free(b64_buf);
-      outResponse = "Failed to allocate WiFiClient";
-      return false;
-    }
-    if (HTTPS_INSECURE) secureClient->setInsecure();
-    tcpClient = secureClient;
+    if (HTTPS_INSECURE) secureClient.setInsecure();
+    clientPtr = &secureClient;
   } else {
-    tcpClient = new WiFiClient();
-    if (!tcpClient) {
-      free(b64_buf);
-      outResponse = "Failed to allocate WiFiClient";
-      return false;
-    }
+    clientPtr = &tcpClient;
   }
 
   HTTPClient http;
   http.setConnectTimeout(10000); 
   http.setTimeout(30000); 
 
-  bool beginOk = http.begin(*tcpClient, targetUrl);
+  // Pass the client by reference to http.begin
+  bool beginOk = http.begin(*clientPtr, targetUrl);
   if (!beginOk) {
     free(b64_buf);
-    delete tcpClient;
+    // No delete needed for static client
     outResponse = "HTTP begin() failed";
     return false;
   }
@@ -107,7 +101,7 @@ bool captureAndSendToApi(const char* targetUrl, String &outResponse, int &outHtt
   }
 
   http.end();
-  delete tcpClient;
+  // clientPtr is not deleted because it points to a static object
   free(b64_buf);
 
   return (httpCode >= 200 && httpCode < 300);
