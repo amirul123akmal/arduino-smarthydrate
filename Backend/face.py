@@ -130,24 +130,17 @@ class FaceMatcher:
             img = Image.open(BytesIO(img_bytes)).convert("RGB")
             img_np = np.array(img)
             query_encs = face_recognition.face_encodings(img_np)
-            logging.info("query_encs: %s", query_encs)
             if not query_encs:
                 return None
             query_enc = query_encs[0]  # use the first face found in the query image
         except Exception:
             return None
         
-        logging.info("query_enc: passed it")
-        logging.info("self.encodings:")
-        logging.info("self.encodings: %s", self.encodings)
         if not self.encodings:
             return None
-        logging.info("self.encodings: %s", self.encodings)
         matches = face_recognition.compare_faces(self.encodings, query_enc, tolerance=tolerance)
-        logging.info("matches: %s", matches)
         if True in matches:
             idx = matches.index(True)
-            logging.info("idx: %s", idx)
             return self.uuids[idx]
         return None
 
