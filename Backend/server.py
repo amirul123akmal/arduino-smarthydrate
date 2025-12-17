@@ -13,11 +13,14 @@ import uuid
 import base64
 import imghdr
 import logging
+import json
 from sqliteDB import SqliteDB
 from user import delete_user
 from flask import g, current_app, Flask, request, jsonify, render_template
 from werkzeug.utils import secure_filename
 from binascii import Error as BinAsciiError
+
+from face import FaceMatcher
 
 # Configure logging to file
 logging.basicConfig(
@@ -34,6 +37,8 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 # Initialize the database
 db = SqliteDB("app.db")
 db.init_app(app)
+
+face_manager = FaceMatcher()
 
 # regex to parse data URLs: data:<mime>;base64,<data>
 DATA_URL_RE = re.compile(r'^data:(image/[^;]+);base64,(.+)$', flags=re.I)
@@ -55,6 +60,14 @@ POST /upload-base64
 
 """
 
+@app.route('/refresh-folder')
+def refresh_folder():
+    face_manager.load_faces_from_folder()
+    # Convert numpy arrays to lists for serialization and printing
+    encodings_list = [enc.tolist() for enc in face_manager.encodings]
+    print(encodings_list)
+    return jsonify({"message": "Folder refreshed successfully", "encodings": encodings_list}), 200
+
 @app.route('/upload-base64', methods=['POST'])
 def upload_base64():
     """
@@ -65,76 +78,19 @@ def upload_base64():
     if request.is_json:
         payload = request.get_json()
         base64_str = payload.get('image') if payload else None
-        provided_name = payload.get('filename') if payload else None
     else:
-        base64_str = request.form.get('image') or request.values.get('image')
-        provided_name = request.form.get('filename') or request.values.get('filename')
+        base64_str = request.form.get('image')
 
     if not base64_str:
         return jsonify({"error": "No 'image' data provided"}), 400
 
-    # If it's a data URL, extract the mime and base64 payload
-    m = DATA_URL_RE.match(base64_str.strip())
-    mime_type = None
-    if m:
-        mime_type = m.group(1).lower()
-        base64_payload = m.group(2)
-    else:
-        # assume raw base64 string
-        base64_payload = base64_str.strip()
-
-    # Remove whitespace/newlines that might be present
-    base64_payload = re.sub(r'\s+', '', base64_payload)
-
-    try:
-        image_bytes = base64.b64decode(base64_payload, validate=True)
-    except (BinAsciiError, ValueError) as e:
-        return jsonify({"error": "Invalid base64 data", "details": str(e)}), 400
-
-    # Try to determine extension
-    ext = None
-    if mime_type:
-        # map common mime to extension
-        if mime_type == 'image/png':
-            ext = 'png'
-        elif mime_type in ('image/jpeg', 'image/jpg'):
-            ext = 'jpg'
-        elif mime_type == 'image/gif':
-            ext = 'gif'
-        elif mime_type == 'image/webp':
-            ext = 'webp'
-        # else fallback to imghdr detection below
-
-    if not ext:
-        ext = detect_extension_from_bytes(image_bytes)
-
-    if not ext:
-        return jsonify({"error": "Could not determine image type"}), 400
-
-    # Determine filename
-    if provided_name:
-        # sanitize provided filename but ensure extension matches detected extension
-        safe_name = secure_filename(provided_name)
-        name_root, name_ext = os.path.splitext(safe_name)
-        if name_ext:
-            # if provided extension is different, override with detected ext
-            file_name = f"{name_root}.{ext}"
-        else:
-            file_name = f"{safe_name}.{ext}"
-    else:
-        # generate unique filename
-        file_name = f"{uuid.uuid4().hex}.{ext}"
-
-    save_path = os.path.join(os.getcwd(), file_name)
-
-    # Write the file
-    try:
-        with open(save_path, 'wb') as f:
-            f.write(image_bytes)
-    except OSError as e:
-        return jsonify({"error": "Failed to save file", "details": str(e)}), 500
-
-    return jsonify({"saved_as": file_name, "path": save_path}), 201
+    # result = face_manager.search_image_b64(base64_str)
+    result = face_manager.search_image_b64(base64_str)
+    logging.info("Result: %s", result)
+    if result:
+        return jsonify({"message": "Image processed successfully", "result": result}), 201
+    if not result:
+        return jsonify({"error": "No face detected in image"}), 400
 
 from datetime import datetime
 
@@ -142,41 +98,111 @@ from datetime import datetime
 def add_user():
     """
     Adds a new user with their daily hydration limit and an array of pains.
-    Expects JSON payload: {"name": "User Name", "daily_limit": 2.5, "pains": ["headache", "fatigue"]}
+    Expects JSON payload: {
+        "name": "User Name", 
+        "daily_limit": 2.5, 
+        "pains": ["headache"],
+        "image": "base64..."
+    }
     """
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
-    app.logger.info("Request received: %s", request.get_json())
+    
+    # Avoid logging full base64 image
     payload = request.get_json()
+    log_payload = payload.copy()
+    if 'image' in log_payload:
+        log_payload['image'] = '<base64_data_hidden>'
+    app.logger.info("Request received: %s", log_payload)
+
     name = payload.get('name')
     daily_limit = payload.get('daily_limit')
     pains = payload.get('pains')
+    bb64 = payload.get('image')
 
     if not name or not isinstance(name, str) or not name.strip():
         return jsonify({"error": "Invalid or missing 'name'"}), 400
     if not isinstance(daily_limit, (int, float)) or daily_limit <= 0:
         return jsonify({"error": "Invalid or missing 'daily_limit'. Must be a positive number."}), 400
-    if not isinstance(pains, list):
-        return jsonify({"error": "Invalid or missing 'pains'. Must be an array."}), 400
+    # pains is optional but if present must be list
+    if pains is not None and not isinstance(pains, list):
+        return jsonify({"error": "Invalid 'pains'. Must be an array."}), 400
 
-    # Convert pains list to a JSON string for storage
-    import json
-    # pains_json_str = json.dumps(pains 
+    # Process Image
+    logging.info("Processing image: %s", type(bb64))
+    uuid = face_manager.detect_faces_b64(bb64)
+    # Explicitly store the image
+    image_path = None
+    if bb64:
+        m = DATA_URL_RE.match(bb64.strip())
+        mime_type = None
+        base64_payload = None
+        if m:
+            mime_type = m.group(1).lower()
+            base64_payload = m.group(2)
+        else:
+            base64_payload = bb64.strip()
+
+        base64_payload = re.sub(r'\s+', '', base64_payload)
+
+        try:
+            image_bytes = base64.b64decode(base64_payload, validate=True)
+        except (BinAsciiError, ValueError) as e:
+            app.logger.error(f"Invalid base64 data for image saving: {e}")
+            return jsonify({"error": "Invalid base64 data for image saving", "details": str(e)}), 400
+
+        ext = None
+        if mime_type:
+            if mime_type == 'image/png':
+                ext = 'png'
+            elif mime_type in ('image/jpeg', 'image/jpg'):
+                ext = 'jpg'
+            elif mime_type == 'image/gif':
+                ext = 'gif'
+            elif mime_type == 'image/webp':
+                ext = 'webp'
+
+        if not ext:
+            ext = detect_extension_from_bytes(image_bytes)
+
+        if not ext:
+            app.logger.error("Could not determine image type for saving.")
+            return jsonify({"error": "Could not determine image type for saving"}), 400
+
+        # Use the generated UUID as the filename
+        file_name = f"{name}.{ext}"
+        # Create a dedicated directory for user images
+        user_images_dir = os.path.join(os.getcwd(), "faces")
+        os.makedirs(user_images_dir, exist_ok=True)
+        image_path = os.path.join(user_images_dir, file_name)
+
+        try:
+            with open(image_path, 'wb') as f:
+                f.write(image_bytes)
+        except OSError as e:
+            app.logger.error(f"Failed to save image file: {e}")
+            return jsonify({"error": "Failed to save image file", "details": str(e)}), 500
+    else:
+        app.logger.warning("No image data provided for user, image_path will be None.")
+
+    app.logger.info("Face detected with UUID: %s", uuid)
+    if not uuid:
+        return jsonify({"error": "no face found in image"}), 500
+
     daily_limit_ml = daily_limit * 1000
     try:
-        # Assuming a 'users' table with columns: id, name, daily_limit_liters, pains_json
-        # And that SqliteDB has an execute_query method for inserts
         query = """
             INSERT INTO users (name, image_path, daily_limit_ml, created_at)
             VALUES (?, ?, ?, ?);
         """
-        # The execute_query method should return the last inserted row ID
-        user_id = db.execute(query, (name.strip(), '', daily_limit_ml, datetime.now()))
-        app.logger.info("User added successfully: %s", user_id.fetchone())
-        return jsonify({"message": "User feature added successfully", "user_id": user_id.fetchone()}), 201
+        user_id_cursor = db.execute(query, (name.strip(), uuid, daily_limit_ml, datetime.now()))
+        user_id = user_id_cursor.fetchone()[0] if user_id_cursor.fetchone() else user_id_cursor.lastrowid
+        
+        app.logger.info("User added successfully with ID: %s", user_id)
+        return jsonify({"message": "User added successfully", "user_id": user_id}), 201
     except Exception as e:
-        app.logger.error(f"Error adding user feature: {e}")
-        return jsonify({"error": "Failed to add user feature", "details": str(e)}), 500
+        app.logger.error(f"Error adding user: {e}")
+        return jsonify({"error": "Failed to add user", "details": str(e)}), 500
 
 
 @app.route('/delete-users', methods=['POST'])
