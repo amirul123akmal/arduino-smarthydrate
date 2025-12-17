@@ -11,3 +11,4 @@ Backend/instance/app.db
 Backend/backend.log
 Backend/Storage/*
 Backend/Faces/*
+temp/**
