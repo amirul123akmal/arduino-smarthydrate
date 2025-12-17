@@ -133,7 +133,6 @@ void handleSnapEndpoint() {
     esc.replace("\n", "\\n");
     esc.replace("\r", "\\r");
     reply += "\"" + esc + "\"";
-    reply += ", \"image\": \"" + base64Image + "\"";
     reply += "}";
     server.send(200, "application/json", reply);
   } else {
@@ -146,7 +145,6 @@ void handleSnapEndpoint() {
     esc.replace("\n", "\\n");
     esc.replace("\r", "\\r");
     reply += "\"" + esc + "\"";
-    reply += ", \"image\": \"" + base64Image + "\"";
     reply += "}";
     server.send(500, "application/json", reply);
   }
