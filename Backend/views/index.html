@@ -205,7 +205,42 @@
                     <h4 class="text-lg font-semibold">Add New User</h4>
                     <button id="close-add-user" class="text-slate-500 hover:text-slate-700">&times;</button>
                 </div>
-                <form id="add-user-form" action="/add-user" method="POST" class="space-y-4">
+                <form id="add-user-form" class="space-y-4">
+                    <!-- Camera Section -->
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Face Capture (Required)</label>
+                        <div class="relative w-full bg-slate-900 rounded-lg overflow-hidden aspect-video ring-1 ring-slate-200">
+                            <!-- Video Feed -->
+                            <video id="camera-feed" class="w-full h-full object-cover transform scale-x-[-1]" autoplay playsinline muted></video>
+                            
+                            <!-- Canvas for capture (hidden) -->
+                            <canvas id="camera-canvas" class="hidden"></canvas>
+                            
+                            <!-- Captured Image Preview -->
+                            <img id="camera-preview" alt="Captured Face" width="640" height="360" class="hidden w-full h-full object-cover transform scale-x-[-1]" />
+                            
+                            <!-- Placeholder / Status -->
+                            <div id="camera-status" class="absolute inset-0 flex items-center justify-center text-slate-400 text-sm bg-slate-100">
+                                Camera required
+                            </div>
+                        </div>
+
+                        <!-- Camera Controls -->
+                        <div class="mt-2 flex justify-center gap-3">
+                            <button type="button" id="btn-start-camera" 
+                                    class="px-3 py-1.5 text-xs font-medium bg-slate-200 hover:bg-slate-300 rounded text-slate-700 transition-colors">
+                                Start Camera
+                            </button>
+                            <button type="button" id="btn-capture" disabled
+                                    class="px-3 py-1.5 text-xs font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                                Take Picture
+                            </button>
+                            <button type="button" id="btn-retake" class="hidden px-3 py-1.5 text-xs font-medium bg-amber-100 hover:bg-amber-200 text-amber-800 rounded transition-colors">
+                                Retake
+                            </button>
+                        </div>
+                    </div>
+
                     <div>
                         <label class="block text-sm text-slate-700">Name</label>
                         <input name="name"
@@ -227,20 +262,162 @@
                                placeholder="e.g. headache, fatigue"
                                class="mt-1 block w-full rounded-md border-slate-200 shadow-sm px-3 py-2" />
                     </div>
-                    <div class="flex items-center justify-end gap-2">
+                    <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
                         <button type="button"
                                 id="cancel-add-user"
-                                class="px-3 py-2 rounded-md text-sm bg-slate-100">Cancel</button>
-                        <button type="submit" class="px-4 py-2 rounded-md bg-indigo-600 text-white">Add user</button>
+                                class="px-3 py-2 rounded-md text-sm bg-slate-100 hover:bg-slate-200 text-slate-600">Cancel</button>
+                        <button type="submit" class="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm">Add user</button>
                     </div>
                 </form>
             </div>
         </div>
         <script>
+        // Camera Variables
+        let stream = null;
+        let capturedImageBase64 = null;
+        
+        const videoEl = document.getElementById('camera-feed');
+        const canvasEl = document.getElementById('camera-canvas');
+        const previewEl = document.getElementById('camera-preview');
+        const statusEl = document.getElementById('camera-status');
+        
+        const btnStart = document.getElementById('btn-start-camera');
+        const btnCapture = document.getElementById('btn-capture');
+        const btnRetake = document.getElementById('btn-retake');
+
+        // Modal handling
+        const addBtn = document.getElementById('add-user-btn');
+        const modal = document.getElementById('add-user-modal');
+        const closeBtn = document.getElementById('close-add-user');
+        const cancelBtn = document.getElementById('cancel-add-user');
+
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            videoEl.srcObject = null;
+        }
+
+        function resetCameraUI() {
+            stopCamera();
+            capturedImageBase64 = null;
+            
+            videoEl.classList.remove('hidden');
+            previewEl.classList.add('hidden');
+            statusEl.classList.remove('hidden'); // Show "Camera required" overlay
+            statusEl.textContent = 'Camera required';
+            statusEl.classList.replace('hidden', 'flex'); // Ensure flex is on if it was hidden
+
+            btnStart.classList.remove('hidden');
+            btnCapture.classList.remove('hidden');
+            btnCapture.disabled = true;
+            btnRetake.classList.add('hidden');
+        }
+
+        function getUserMediaCompat(constraints) {
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    return navigator.mediaDevices.getUserMedia(constraints);
+                }
+
+                const legacy = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+                if (!legacy) {
+                    return Promise.reject(new Error('getUserMedia is not supported in this browser.'));
+                }
+
+                return new Promise((resolve, reject) => {
+                    legacy.call(navigator, constraints, resolve, reject);
+                });
+            }
+
+
+        async function startCamera() {
+                try {
+                    statusEl.textContent = 'Requesting access...';
+
+                    if (!window.navigator) throw new Error('Navigator not available');
+
+                    // Optional debug logs:
+                    console.log('navigator.mediaDevices:', navigator.mediaDevices);
+                    console.log('userAgent:', navigator.userAgent);
+
+                    stream = await getUserMediaCompat({ video: true });
+                    videoEl.srcObject = stream;
+
+                    statusEl.classList.add('hidden');
+                    statusEl.classList.remove('flex');
+                    btnStart.classList.add('hidden');
+                    btnCapture.disabled = false;
+                } catch (err) {
+                    console.error('camera error:', err);
+                    statusEl.textContent = 'Camera access denied or unavailable';
+                    statusEl.classList.remove('hidden');
+                    btnCapture.disabled = true;
+                }
+            }
+
+
+        btnStart?.addEventListener('click', startCamera);
+
+        btnCapture?.addEventListener('click', () => {
+            if (!stream) return;
+            
+            // Set canvas dim to match video
+            canvasEl.width = videoEl.videoWidth;
+            canvasEl.height = videoEl.videoHeight;
+            
+            const ctx = canvasEl.getContext('2d');
+            // Check if we need to flip the context if I applied CSS transform scale-x-[-1]
+            // Actually, the CSS transform only affects display. The read data is raw.
+            // If we want the saved image to look like the mirror view, we must flip it on canvas.
+            ctx.translate(canvasEl.width, 0);
+            ctx.scale(-1, 1);
+            
+            ctx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
+            
+            capturedImageBase64 = canvasEl.toDataURL('image/jpeg', 0.8);
+            previewEl.src = capturedImageBase64;
+            
+            // Switch UI
+            videoEl.classList.add('hidden');
+            previewEl.classList.remove('hidden');
+            btnCapture.classList.add('hidden');
+            btnRetake.classList.remove('hidden');
+            
+            // Stop stream to save battery/led
+            stopCamera();
+        });
+
+        btnRetake?.addEventListener('click', () => {
+            resetCameraUI();
+            startCamera(); // Restart immediately
+        });
+
+        addBtn?.addEventListener('click', () => {
+            resetCameraUI();
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            // Auto-start camera for convenience? Let's wait for user button or do it.
+            // Let's do auto-start
+            startCamera();
+        });
+
+        [closeBtn, cancelBtn].forEach(el => el?.addEventListener('click', () => {
+            stopCamera();
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }));
+
         // Form handling
         const addUserForm = document.getElementById('add-user-form');
         addUserForm?.addEventListener('submit', async (e) => {
             e.preventDefault();
+            
+            if (!capturedImageBase64) {
+                alert('You must capture a photo before adding the user.');
+                return;
+            }
+
             const formData = new FormData(addUserForm);
             
             // Construct JSON payload
@@ -250,7 +427,8 @@
             const payload = {
                 name: formData.get('name'),
                 daily_limit: parseFloat(formData.get('daily_limit')),
-                pains: painsArray
+                pains: painsArray,
+                image: capturedImageBase64
             };
 
             try {
@@ -261,7 +439,6 @@
                 });
                 
                 if (res.ok) {
-                    // Success: reload to show (if connected to DB) or just close
                     window.location.reload(); 
                 } else {
                     const err = await res.json();
@@ -293,21 +470,6 @@
                 }
             });
         }
-
-        // Modal handling
-        const addBtn = document.getElementById('add-user-btn');
-        const modal = document.getElementById('add-user-modal');
-        const closeBtn = document.getElementById('close-add-user');
-        const cancelBtn = document.getElementById('cancel-add-user');
-
-        addBtn?.addEventListener('click', () => {
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
-        });
-        [closeBtn, cancelBtn].forEach(el => el?.addEventListener('click', () => {
-            modal.classList.add('hidden');
-            modal.classList.remove('flex');
-        }));
 
         // Init
         document.addEventListener('DOMContentLoaded', () => {
