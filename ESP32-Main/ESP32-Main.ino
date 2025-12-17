@@ -1,7 +1,9 @@
 #include "Config.h"
 #include "DisplayModule.h"
 #include "NetworkModule.h"
-#include "JpegDecoderModule.h"
+// #include "JpegDecoderModule.h"
+
+#include <ArduinoJson.h>
 
 // --- Global Objects ---
 DisplayModule display(SCREEN_WIDTH, SCREEN_HEIGHT, OLED_RESET);
@@ -49,11 +51,39 @@ void loop() {
     
     // Send Request
     String response = network.sendPostRequest(SERVER_URL, "{}");
-    
+
+    JsonDocument doc; // ArduinoJson v7
+    Serial.println(response);
+    DeserializationError error = deserializeJson(doc, response);
+
+    display.clear();
+    display.setCursor(0,0);
+
+    if (error) {
+      display.print("JSON Error: ");
+      display.println(error.c_str());
+      display.println("Possible face not found...");
+    } else {
+      // retrieve value from json. Replace "message" with your actual JSON key
+      error = deserializeJson(doc, doc["api_response"]);
+      const char* value = doc["result"]; 
+      
+      if (value) {
+        display.println(value);
+      } else {
+        display.println("Key not found");
+        // Optional: print raw response if key missing
+      }
+
+    }
+    display.display();
+
+    isSending = false;
     delay(4000); 
     display.clear();
     display.setCursor(0,0);
-    display.println(WiFi.localIP());
+    display.println("Wifi IP: ");
+    display.println(WiFi.localIP().toString());
     display.println("Ready. Press G17.");
     display.display();
   }
