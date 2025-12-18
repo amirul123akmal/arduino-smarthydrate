@@ -72,6 +72,7 @@ void loop() {
         display.println(value);
       } else {
         display.println("Key not found");
+        display.println("Face not found");
         // Optional: print raw response if key missing
       }
 

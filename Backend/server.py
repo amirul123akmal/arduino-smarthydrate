@@ -51,14 +51,7 @@ def detect_extension_from_bytes(data: bytes):
         return 'jpg'
     return kind  # may be 'png', 'gif', etc. or None
 
-"""
 
-POST /upload-base64
- - Content-Type: application/json
- - Body JSON: {"image": "<base64-or-data-url>", "filename": "optional-name.png"}
-
-
-"""
 
 @app.route('/refresh-folder')
 def refresh_folder():
@@ -67,6 +60,12 @@ def refresh_folder():
     encodings_list = [enc.tolist() for enc in face_manager.encodings]
     print(encodings_list)
     return jsonify({"message": "Folder refreshed successfully", "encodings": encodings_list}), 200
+
+"""
+POST /upload-base64
+ - Content-Type: application/json
+ - Body JSON: {"image": "<base64-or-data-url>", "filename": "optional-name.png"}
+"""
 
 @app.route('/upload-base64', methods=['POST'])
 def upload_base64():
@@ -86,6 +85,7 @@ def upload_base64():
 
     # result = face_manager.search_image_b64(base64_str)
     result = face_manager.search_image_b64(base64_str)
+    
     logging.info("Result: %s", result)
     if result:
         return jsonify({"message": "Image processed successfully", "result": result}), 201
